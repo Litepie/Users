@@ -1,0 +1,65 @@
+{
+    "name": "litepie/users",
+    "description": "A comprehensive Laravel user management package with multi-tenancy, roles, permissions, workflows, and file management",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "users",
+        "multi-tenant",
+        "roles",
+        "permissions",
+        "workflow",
+        "file-management",
+        "authentication"
+    ],
+    "authors": [
+        {
+            "name": "Litepie Team",
+            "email": "support@litepie.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "laravel/framework": "^11.0|^12.0",
+        "litepie/tenancy": "^1.0",
+        "litepie/roles": "^1.0",
+        "litepie/filehub": "^1.0",
+        "litepie/flow": "^1.0",
+        "litepie/actions": "^1.0",
+        "intervention/image": "^3.0",
+        "spatie/laravel-activitylog": "^4.8",
+        "spatie/laravel-permission": "^6.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0",
+        "phpunit/phpunit": "^10.0",
+        "mockery/mockery": "^1.6",
+        "fakerphp/faker": "^1.23"
+    },
+    "autoload": {
+        "psr-4": {
+            "Litepie\\Users\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Litepie\\Users\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Litepie\\Users\\Providers\\UsersServiceProvider"
+            ],
+            "aliases": {
+                "Users": "Litepie\\Users\\Facades\\Users"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true
+    }
+}
