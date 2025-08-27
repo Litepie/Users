@@ -398,4 +398,43 @@ class OrganizationUserType extends BaseUserType
             }
         }
     }
+
+    /**
+     * Register a new organization user.
+     */
+    public function registerUser(array $userData, ?int $organizationId = null): User
+    {
+        // Set organization-specific defaults
+        $userData = array_merge([
+            'user_type' => $this->name,
+            'status' => 'pending',
+            'organization_id' => $organizationId,
+        ], $userData);
+
+        // Create the user using User model
+        $user = User::create($userData);
+
+        return $user;
+    }
+
+    /**
+     * Update organization user profile.
+     */
+    public function updateProfile(User $user, array $profileData): void
+    {
+        // Update user basic data
+        $userFields = array_intersect_key($profileData, array_flip([
+            'first_name', 'last_name', 'email', 'phone'
+        ]));
+        
+        if (!empty($userFields)) {
+            $user->update($userFields);
+        }
+
+        // Update organization-specific profile data
+        if ($user->profile && isset($profileData['organization_data'])) {
+            $organizationFields = $profileData['organization_data'];
+            $user->profile->update($organizationFields);
+        }
+    }
 }

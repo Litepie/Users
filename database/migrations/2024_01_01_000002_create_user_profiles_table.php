@@ -44,6 +44,8 @@ return new class extends Migration
             
             // Organization hierarchy fields
             $table->foreignId('organization_id')->nullable()->constrained('organizations')->onDelete('set null');
+            $table->foreignId('department_id')->nullable()->constrained('organization_departments')->onDelete('set null');
+            $table->foreignId('position_id')->nullable()->constrained('organization_positions')->onDelete('set null');
             $table->string('organization_role')->nullable(); // manager, supervisor, staff, intern
             $table->string('employee_id')->nullable()->unique();
             $table->string('department')->nullable(); // Can be overridden by organization department

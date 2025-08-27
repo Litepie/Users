@@ -68,8 +68,10 @@ class UsersServiceProvider extends ServiceProvider
             __DIR__ . '/../../resources/views' => resource_path('views/vendor/users'),
         ], 'users-views');
 
-        // Register policies
-        $this->registerPolicies();
+        // Register policies after the application is fully booted
+        $this->app->booted(function () {
+            $this->registerPolicies();
+        });
 
         // Register commands
         if ($this->app->runningInConsole()) {
@@ -103,52 +105,88 @@ class UsersServiceProvider extends ServiceProvider
      */
     protected function registerPolicies(): void
     {
-        // Register user management policies
-        Gate::define('manage-users', function ($user) {
-            return $user->hasRole('admin') || $user->hasRole('manager');
-        });
-
-        Gate::define('view-user', function ($user, $targetUser) {
-            if ($user->hasRole('admin')) {
-                return true;
+        // Check if Shield package is properly installed and registered
+        if (!class_exists('\Litepie\Shield\PermissionRegistrar')) {
+            // Log that Shield is not available
+            if (app()->bound('log')) {
+                app('log')->info('Users package: Shield package not installed, skipping permission registration');
             }
-            
-            if ($user->hasRole('manager') && $user->organization_id === $targetUser->organization_id) {
-                return true;
+            return;
+        }
+
+        // Try to check if Shield services are available
+        try {
+            // Test if we can access Shield's PermissionRegistrar
+            if (!app()->bound(\Litepie\Shield\PermissionRegistrar::class)) {
+                if (app()->bound('log')) {
+                    app('log')->warning('Users package: Shield PermissionRegistrar not bound in container');
+                }
+                return;
             }
-            
-            return $user->id === $targetUser->id;
-        });
 
-        Gate::define('edit-user', function ($user, $targetUser) {
-            if ($user->hasRole('admin')) {
-                return true;
+            // Test if we can actually resolve the service
+            $permissionRegistrar = app(\Litepie\Shield\PermissionRegistrar::class);
+
+            // Register user management policies
+            Gate::define('manage-users', function ($user) {
+                return $user->hasRole('admin') || $user->hasRole('manager');
+            });
+
+            Gate::define('view-user', function ($user, $targetUser) {
+                if ($user->hasRole('admin')) {
+                    return true;
+                }
+                
+                if ($user->hasRole('manager') && $user->organization_id === $targetUser->organization_id) {
+                    return true;
+                }
+                
+                return $user->id === $targetUser->id;
+            });
+
+            Gate::define('edit-user', function ($user, $targetUser) {
+                if ($user->hasRole('admin')) {
+                    return true;
+                }
+                
+                if ($user->hasRole('manager') && $user->organization_id === $targetUser->organization_id) {
+                    return true;
+                }
+                
+                return $user->id === $targetUser->id;
+            });
+
+            Gate::define('delete-user', function ($user, $targetUser) {
+                return $user->hasRole('admin') && $user->id !== $targetUser->id;
+            });
+
+            // Organization-specific policies
+            Gate::define('manage-organization-users', function ($user, $organizationId) {
+                return $user->belongsToOrganization($organizationId) && $user->isOrganizationAdmin();
+            });
+
+            Gate::define('view-organization-users', function ($user, $organizationId) {
+                return $user->belongsToOrganization($organizationId);
+            });
+
+            Gate::define('manage-user-hierarchy', function ($user, $organizationId) {
+                return $user->belongsToOrganization($organizationId) && 
+                       ($user->isOrganizationAdmin() || $user->isManager());
+            });
+
+            // Log successful registration
+            if (app()->bound('log')) {
+                app('log')->info('Users package: Shield integration and policies registered successfully');
             }
-            
-            if ($user->hasRole('manager') && $user->organization_id === $targetUser->organization_id) {
-                return true;
+
+        } catch (\Exception $e) {
+            // Log the error but don't break the application
+            if (app()->bound('log')) {
+                app('log')->warning(
+                    'Users package: Failed to register policies with Shield - ' . $e->getMessage()
+                );
             }
-            
-            return $user->id === $targetUser->id;
-        });
-
-        Gate::define('delete-user', function ($user, $targetUser) {
-            return $user->hasRole('admin') && $user->id !== $targetUser->id;
-        });
-
-        // Organization-specific policies
-        Gate::define('manage-organization-users', function ($user, $organizationId) {
-            return $user->belongsToOrganization($organizationId) && $user->isOrganizationAdmin();
-        });
-
-        Gate::define('view-organization-users', function ($user, $organizationId) {
-            return $user->belongsToOrganization($organizationId);
-        });
-
-        Gate::define('manage-user-hierarchy', function ($user, $organizationId) {
-            return $user->belongsToOrganization($organizationId) && 
-                   ($user->isOrganizationAdmin() || $user->isManager());
-        });
+        }
     }
 
     /**

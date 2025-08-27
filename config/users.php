@@ -301,4 +301,47 @@ return [
         'prefix' => 'users',
         'tags' => ['users', 'permissions'],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Organization Integration
+    |--------------------------------------------------------------------------
+    |
+    | Configure organization hierarchy and management features.
+    |
+    */
+    'organization' => [
+        'enabled' => true,
+        'hierarchical_structure' => true,
+        'use_departments' => true,
+        'use_positions' => true,
+        'auto_assign_on_registration' => true,
+        'default_organization_role' => 'staff',
+        'allowed_roles' => [
+            'admin' => 'Organization Administrator',
+            'manager' => 'Manager',
+            'supervisor' => 'Supervisor', 
+            'staff' => 'Staff Member',
+            'intern' => 'Intern',
+        ],
+        'employment_statuses' => [
+            'active' => 'Active',
+            'inactive' => 'Inactive',
+            'terminated' => 'Terminated',
+            'suspended' => 'Suspended',
+        ],
+        'employment_types' => [
+            'full-time' => 'Full Time',
+            'part-time' => 'Part Time',
+            'contract' => 'Contract',
+            'freelance' => 'Freelance',
+            'temporary' => 'Temporary',
+        ],
+        'permissions' => [
+            'manage_hierarchy' => true,
+            'view_org_users' => true,
+            'assign_roles' => false, // Requires specific permissions
+            'manage_departments' => false, // Requires admin role
+        ],
+    ],
 ];
