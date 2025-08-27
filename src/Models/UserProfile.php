@@ -5,8 +5,8 @@ namespace Litepie\Users\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Litepie\Tenancy\Traits\BelongsToTenant;
-use Spatie\Activitylog\Traits\LogsActivity;
-use Spatie\Activitylog\LogOptions;
+use Litepie\Logs\Traits\LogsActivity;
+use Litepie\Organization\Models\Organization;
 
 class UserProfile extends Model
 {
@@ -38,6 +38,22 @@ class UserProfile extends Model
         'social_links',
         'preferences',
         'metadata',
+        // Organization hierarchy fields
+        'organization_id',
+        'organization_role',
+        'employee_id',
+        'department',
+        'division',
+        'team',
+        'hire_date',
+        'termination_date',
+        'employment_status',
+        'employment_type',
+        'salary',
+        'salary_currency',
+        'reporting_structure',
+        'permissions',
+        'organization_metadata',
     ];
 
     /**
@@ -48,6 +64,13 @@ class UserProfile extends Model
         'social_links' => 'array',
         'preferences' => 'array',
         'metadata' => 'array',
+        // Organization hierarchy casts
+        'hire_date' => 'date',
+        'termination_date' => 'date',
+        'salary' => 'decimal:2',
+        'reporting_structure' => 'array',
+        'permissions' => 'array',
+        'organization_metadata' => 'array',
     ];
 
     /**
@@ -56,6 +79,14 @@ class UserProfile extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the organization associated with this profile.
+     */
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     /**
@@ -96,19 +127,92 @@ class UserProfile extends Model
     }
 
     /**
-     * Get activity log options.
+     * Check if employee is currently employed.
      */
-    public function getActivitylogOptions(): LogOptions
+    public function isCurrentlyEmployed(): bool
     {
-        return LogOptions::defaults()
-            ->logOnly([
-                'first_name',
-                'last_name',
-                'phone',
-                'company',
-                'job_title'
-            ])
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
+        return $this->employment_status === 'active' && 
+               ($this->hire_date && $this->hire_date->isPast()) &&
+               (!$this->termination_date || $this->termination_date->isFuture());
     }
+
+    /**
+     * Get employment duration in days.
+     */
+    public function getEmploymentDurationAttribute(): ?int
+    {
+        if (!$this->hire_date) {
+            return null;
+        }
+
+        $endDate = $this->termination_date ?? now();
+        return $this->hire_date->diffInDays($endDate);
+    }
+
+    /**
+     * Get years of service.
+     */
+    public function getYearsOfServiceAttribute(): ?int
+    {
+        if (!$this->hire_date) {
+            return null;
+        }
+
+        $endDate = $this->termination_date ?? now();
+        return $this->hire_date->diffInYears($endDate);
+    }
+
+    /**
+     * Get organization display path.
+     */
+    public function getOrganizationPathAttribute(): string
+    {
+        $parts = array_filter([
+            $this->department,
+            $this->division,
+            $this->team
+        ]);
+
+        return implode(' > ', $parts);
+    }
+
+    /**
+     * Check if user has specific organization permission.
+     */
+    public function hasPermission(string $permission): bool
+    {
+        $permissions = $this->permissions ?? [];
+        return in_array($permission, $permissions);
+    }
+
+    /**
+     * Get formatted salary.
+     */
+    public function getFormattedSalaryAttribute(): ?string
+    {
+        if (!$this->salary) {
+            return null;
+        }
+
+        return number_format($this->salary, 2) . ' ' . ($this->salary_currency ?? 'USD');
+    }
+
+    /**
+     * Activity logging configuration.
+     */
+    protected $logOnly = [
+        'first_name',
+        'last_name', 
+        'phone',
+        'company',
+        'job_title',
+        'organization_role',
+        'employee_id',
+        'department',
+        'employment_status',
+        'hire_date',
+        'termination_date'
+    ];
+    protected $logEvents = ['created', 'updated', 'deleted'];
+    protected $logName = 'user-profile';
 }

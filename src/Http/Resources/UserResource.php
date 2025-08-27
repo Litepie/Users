@@ -30,7 +30,6 @@ class UserResource extends JsonResource
             // Relationships
             'profile' => new UserProfileResource($this->whenLoaded('profile')),
             'roles' => RoleResource::collection($this->whenLoaded('roles')),
-            'permissions' => PermissionResource::collection($this->whenLoaded('permissions')),
             
             // Computed attributes
             'avatar_url' => $this->avatar_url,
@@ -38,6 +37,9 @@ class UserResource extends JsonResource
             'is_active' => $this->is_active,
             'is_verified' => $this->hasVerifiedEmail(),
             'can_login' => $this->canLogin(),
+            'permissions' => $this->when($this->shouldShowPermissions($request), function () {
+                return $this->getAllPermissions();
+            }),
             
             // Statistics (only for admin/owner)
             $this->mergeWhen($this->shouldShowStatistics($request), [
@@ -59,6 +61,19 @@ class UserResource extends JsonResource
      * Determine if statistics should be shown
      */
     protected function shouldShowStatistics(Request $request): bool
+    {
+        $user = $request->user();
+        
+        return $user && (
+            $user->id === $this->id || 
+            $user->hasRole(['admin', 'manager'])
+        );
+    }
+
+    /**
+     * Determine if permissions should be shown
+     */
+    protected function shouldShowPermissions(Request $request): bool
     {
         $user = $request->user();
         

@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Litepie\Users\Controllers\Api\UserController;
 use Litepie\Users\Controllers\Api\ProfileController;
 use Litepie\Users\Controllers\Api\AuthController;
+use Litepie\Users\Http\Controllers\Api\OrganizationUserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -82,5 +83,26 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('users/delete', [UserController::class, 'bulkDelete']);
         Route::post('users/assign-role', [UserController::class, 'bulkAssignRole']);
         Route::post('users/export', [UserController::class, 'exportUsers']);
+    });
+    
+    // Organization User Management
+    Route::prefix('organizations/{organizationId}/users')->group(function () {
+        Route::get('/', [OrganizationUserController::class, 'index']);
+        Route::post('/', [OrganizationUserController::class, 'store']);
+        Route::get('/{user}', [OrganizationUserController::class, 'show']);
+        Route::put('/{user}', [OrganizationUserController::class, 'update']);
+        Route::delete('/{user}', [OrganizationUserController::class, 'destroy']);
+        
+        // Profile Management
+        Route::put('/{user}/profile', [OrganizationUserController::class, 'updateProfile']);
+        
+        // Organization Hierarchy
+        Route::get('/hierarchy', [OrganizationUserController::class, 'hierarchy']);
+        Route::post('/{user}/transfer', [OrganizationUserController::class, 'transfer']);
+        
+        // Bulk Organization Operations
+        Route::post('/bulk/transfer', [OrganizationUserController::class, 'bulkTransfer']);
+        Route::post('/bulk/update-position', [OrganizationUserController::class, 'bulkUpdatePosition']);
+        Route::get('/export', [OrganizationUserController::class, 'export']);
     });
 });

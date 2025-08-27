@@ -7,14 +7,16 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Litepie\Tenancy\Traits\BelongsToTenant;
-use Litepie\Roles\Traits\HasRoles;
+use Litepie\Shield\Traits\HasRoles;
 use Litepie\Filehub\Traits\HasFileAttachments;
 use Litepie\Flow\Traits\HasWorkflow;
 use Litepie\Flow\Contracts\Workflowable;
-use Spatie\Activitylog\Traits\LogsActivity;
-use Spatie\Activitylog\LogOptions;
+use Litepie\Logs\Traits\LogsActivity;
+use Litepie\Organization\Traits\HasOrganization;
+use Litepie\Organization\Models\Organization;
 use Carbon\Carbon;
 
 class User extends Authenticatable implements MustVerifyEmail, Workflowable
@@ -27,7 +29,8 @@ class User extends Authenticatable implements MustVerifyEmail, Workflowable
         HasRoles,
         HasFileAttachments,
         HasWorkflow,
-        LogsActivity;
+        LogsActivity,
+        HasOrganization;
 
     /**
      * The attributes that are mass assignable.
@@ -48,6 +51,21 @@ class User extends Authenticatable implements MustVerifyEmail, Workflowable
         'two_factor_secret',
         'two_factor_recovery_codes',
         'metadata',
+        // Organization fields
+        'organization_id',
+        'organization_position',
+        'is_organization_admin',
+        'is_organization_owner',
+        'reports_to_user_id',
+        'primary_manager_id',
+        'secondary_manager_id',
+        'organization_permissions',
+        'organization_settings',
+        'organization_joined_at',
+        'organization_left_at',
+        'work_schedule',
+        'work_location',
+        'office_location',
     ];
 
     /**
@@ -70,6 +88,14 @@ class User extends Authenticatable implements MustVerifyEmail, Workflowable
         'two_factor_enabled' => 'boolean',
         'two_factor_recovery_codes' => 'array',
         'metadata' => 'array',
+        // Organization casts
+        'is_organization_admin' => 'boolean',
+        'is_organization_owner' => 'boolean',
+        'organization_permissions' => 'array',
+        'organization_settings' => 'array',
+        'organization_joined_at' => 'datetime',
+        'organization_left_at' => 'datetime',
+        'work_schedule' => 'array',
     ];
 
     /**
@@ -122,6 +148,71 @@ class User extends Authenticatable implements MustVerifyEmail, Workflowable
     }
 
     /**
+     * Get the user's organization.
+     */
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class);
+    }
+
+    /**
+     * Get the user that this user reports to.
+     */
+    public function reportsTo()
+    {
+        return $this->belongsTo(User::class, 'reports_to_user_id');
+    }
+
+    /**
+     * Get users that report to this user.
+     */
+    public function directReports()
+    {
+        return $this->hasMany(User::class, 'reports_to_user_id');
+    }
+
+    /**
+     * Get the primary manager.
+     */
+    public function primaryManager()
+    {
+        return $this->belongsTo(User::class, 'primary_manager_id');
+    }
+
+    /**
+     * Get the secondary manager.
+     */
+    public function secondaryManager()
+    {
+        return $this->belongsTo(User::class, 'secondary_manager_id');
+    }
+
+    /**
+     * Get users who have this user as their primary manager.
+     */
+    public function primaryManagedUsers()
+    {
+        return $this->hasMany(User::class, 'primary_manager_id');
+    }
+
+    /**
+     * Get users who have this user as their secondary manager.
+     */
+    public function secondaryManagedUsers()
+    {
+        return $this->hasMany(User::class, 'secondary_manager_id');
+    }
+
+    /**
+     * Get all users managed by this user (primary + secondary).
+     */
+    public function managedUsers()
+    {
+        return User::where('primary_manager_id', $this->id)
+                  ->orWhere('secondary_manager_id', $this->id);
+    }
+
+    /**
      * Scope users by type.
      */
     public function scopeOfType($query, string $type)
@@ -167,6 +258,58 @@ class User extends Authenticatable implements MustVerifyEmail, Workflowable
     public function scopeUnverified($query)
     {
         return $query->whereNull('email_verified_at');
+    }
+
+    /**
+     * Scope users by organization.
+     */
+    public function scopeInOrganization($query, $organizationId)
+    {
+        return $query->where('organization_id', $organizationId);
+    }
+
+    /**
+     * Scope organization admins.
+     */
+    public function scopeOrganizationAdmins($query)
+    {
+        return $query->where('is_organization_admin', true);
+    }
+
+    /**
+     * Scope organization owners.
+     */
+    public function scopeOrganizationOwners($query)
+    {
+        return $query->where('is_organization_owner', true);
+    }
+
+    /**
+     * Scope users by organization position.
+     */
+    public function scopeByPosition($query, string $position)
+    {
+        return $query->where('organization_position', $position);
+    }
+
+    /**
+     * Scope users by work location.
+     */
+    public function scopeByWorkLocation($query, string $location)
+    {
+        return $query->where('work_location', $location);
+    }
+
+    /**
+     * Scope managers (users who manage others).
+     */
+    public function scopeManagers($query)
+    {
+        return $query->whereExists(function ($subquery) {
+            $subquery->select(DB::raw(1))
+                    ->from('users as u')
+                    ->whereRaw('u.primary_manager_id = users.id OR u.secondary_manager_id = users.id');
+        });
     }
 
     /**
@@ -231,6 +374,163 @@ class User extends Authenticatable implements MustVerifyEmail, Workflowable
     public function ban(): bool
     {
         return $this->update(['status' => self::STATUS_BANNED]);
+    }
+
+    /**
+     * Check if user is organization admin.
+     */
+    public function isOrganizationAdmin(): bool
+    {
+        return $this->is_organization_admin || $this->is_organization_owner;
+    }
+
+    /**
+     * Check if user is organization owner.
+     */
+    public function isOrganizationOwner(): bool
+    {
+        return $this->is_organization_owner;
+    }
+
+    /**
+     * Check if user belongs to an organization.
+     */
+    public function belongsToOrganization($organizationId = null): bool
+    {
+        if ($organizationId) {
+            return $this->organization_id == $organizationId;
+        }
+        
+        return !is_null($this->organization_id);
+    }
+
+    /**
+     * Check if user can manage organization.
+     */
+    public function canManageOrganization(): bool
+    {
+        return $this->isOrganizationAdmin() && $this->belongsToOrganization();
+    }
+
+    /**
+     * Check if user is a manager.
+     */
+    public function isManager(): bool
+    {
+        return $this->primaryManagedUsers()->exists() || $this->secondaryManagedUsers()->exists();
+    }
+
+    /**
+     * Check if user reports to another user.
+     */
+    public function hasReportsTo(): bool
+    {
+        return !is_null($this->reports_to_user_id);
+    }
+
+    /**
+     * Get organization hierarchy level.
+     */
+    public function getHierarchyLevel(): int
+    {
+        $level = 0;
+        $currentUser = $this;
+        
+        while ($currentUser && $currentUser->reports_to_user_id) {
+            $level++;
+            $currentUser = $currentUser->reportsTo;
+            
+            // Prevent infinite loops
+            if ($level > 10) {
+                break;
+            }
+        }
+        
+        return $level;
+    }
+
+    /**
+     * Get all subordinates (recursive).
+     */
+    public function getAllSubordinates()
+    {
+        $subordinates = collect();
+        
+        foreach ($this->directReports as $report) {
+            $subordinates->push($report);
+            $subordinates = $subordinates->merge($report->getAllSubordinates());
+        }
+        
+        return $subordinates;
+    }
+
+    /**
+     * Get organization hierarchy path.
+     */
+    public function getHierarchyPath(): array
+    {
+        $path = [];
+        $currentUser = $this;
+        
+        while ($currentUser) {
+            array_unshift($path, [
+                'id' => $currentUser->id,
+                'name' => $currentUser->name,
+                'position' => $currentUser->organization_position,
+            ]);
+            
+            $currentUser = $currentUser->reportsTo;
+            
+            // Prevent infinite loops
+            if (count($path) > 10) {
+                break;
+            }
+        }
+        
+        return $path;
+    }
+
+    /**
+     * Check if user has organization permission.
+     */
+    public function hasOrganizationPermission(string $permission): bool
+    {
+        $permissions = $this->organization_permissions ?? [];
+        
+        return in_array($permission, $permissions) || $this->isOrganizationAdmin();
+    }
+
+    /**
+     * Join organization.
+     */
+    public function joinOrganization(int $organizationId, string $position = null, bool $isAdmin = false): bool
+    {
+        return $this->update([
+            'organization_id' => $organizationId,
+            'organization_position' => $position,
+            'is_organization_admin' => $isAdmin,
+            'organization_joined_at' => now(),
+            'organization_left_at' => null,
+        ]);
+    }
+
+    /**
+     * Leave organization.
+     */
+    public function leaveOrganization(): bool
+    {
+        return $this->update([
+            'organization_id' => null,
+            'organization_position' => null,
+            'is_organization_admin' => false,
+            'is_organization_owner' => false,
+            'reports_to_user_id' => null,
+            'primary_manager_id' => null,
+            'secondary_manager_id' => null,
+            'organization_permissions' => null,
+            'organization_settings' => null,
+            'organization_left_at' => now(),
+        ]);
     }
 
     /**
@@ -373,15 +673,11 @@ class User extends Authenticatable implements MustVerifyEmail, Workflowable
     }
 
     /**
-     * Get activity log options.
+     * Activity logging configuration.
      */
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['name', 'email', 'user_type', 'status'])
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
-    }
+    protected $logOnly = ['name', 'email', 'user_type', 'status'];
+    protected $logEvents = ['created', 'updated', 'deleted'];
+    protected $logName = 'user-management';
 
     /**
      * Route notifications for the mail channel.

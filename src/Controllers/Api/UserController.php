@@ -90,7 +90,7 @@ class UserController extends BaseController
      */
     public function show(User $user): JsonResponse
     {
-        $user->load(['profile', 'roles', 'permissions']);
+        $user->load(['profile', 'roles']);
         
         return response()->json([
             'data' => new UserResource($user)
@@ -290,7 +290,7 @@ class UserController extends BaseController
     public function givePermission(Request $request, User $user): JsonResponse
     {
         $request->validate([
-            'permission' => 'required|string|exists:permissions,name'
+            'permission' => 'required|string'
         ]);
 
         try {

@@ -15,21 +15,23 @@
     ],
     "authors": [
         {
-            "name": "Litepie Team",
-            "email": "support@litepie.com"
+            "name": "Lavalite Team",
+            "email": "support@lavalite.org",
+            "homepage": "https://lavalite.org"
         }
     ],
     "require": {
         "php": "^8.2",
+        "intervention/image": "^3.0",
         "laravel/framework": "^11.0|^12.0",
-        "litepie/tenancy": "^1.0",
-        "litepie/roles": "^1.0",
+        "litepie/actions": "^1.0",
         "litepie/filehub": "^1.0",
         "litepie/flow": "^1.0",
-        "litepie/actions": "^1.0",
-        "intervention/image": "^3.0",
-        "spatie/laravel-activitylog": "^4.8",
-        "spatie/laravel-permission": "^6.0"
+        "litepie/logs": "^1.0",
+        "litepie/organization": "^1.0",
+        "litepie/repository": "^1.0",
+        "litepie/shield": "^1.0",
+        "litepie/tenancy": "^1.0"
     },
     "require-dev": {
         "orchestra/testbench": "^9.0",

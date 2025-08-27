@@ -13,9 +13,32 @@ use Litepie\Users\Events\UserActivated;
 use Litepie\Users\Events\UserDeactivated;
 use Litepie\Users\Events\UserRoleChanged;
 use Litepie\Users\Mail\PasswordResetMail;
+use Litepie\Users\Repositories\Contracts\UserRepositoryInterface;
+use Litepie\Users\Repositories\Contracts\UserProfileRepositoryInterface;
 
 class UserManager implements UserManagerContract
 {
+    /**
+     * User repository instance.
+     */
+    protected UserRepositoryInterface $userRepository;
+
+    /**
+     * User profile repository instance.
+     */
+    protected UserProfileRepositoryInterface $profileRepository;
+
+    /**
+     * Create a new user manager instance.
+     */
+    public function __construct(
+        UserRepositoryInterface $userRepository,
+        UserProfileRepositoryInterface $profileRepository
+    ) {
+        $this->userRepository = $userRepository;
+        $this->profileRepository = $profileRepository;
+    }
+
     /**
      * Create a new user.
      */
@@ -35,12 +58,15 @@ class UserManager implements UserManagerContract
             $data['password'] = Hash::make($data['password']);
         }
 
-        // Create user
-        $user = User::create($data);
+        // Extract profile data if present
+        $profileData = $data['profile'] ?? [];
+        unset($data['profile']);
 
-        // Create profile if profile data is provided
-        if (isset($data['profile'])) {
-            $user->profile()->create($data['profile']);
+        // Create user using repository
+        if (!empty($profileData)) {
+            $user = $this->userRepository->createUserWithProfile($data, $profileData);
+        } else {
+            $user = $this->userRepository->create($data);
         }
 
         // Store password in history
@@ -70,15 +96,19 @@ class UserManager implements UserManagerContract
             $this->addPasswordToHistory($user, $data['password']);
         }
 
-        // Update user
-        $user->update($data);
+        // Extract profile data if present
+        $profileData = $data['profile'] ?? [];
+        unset($data['profile']);
+
+        // Update user using repository
+        $updatedUser = $this->userRepository->update($user->id, $data);
 
         // Update profile if profile data is provided
-        if (isset($data['profile'])) {
-            $user->profile()->updateOrCreate([], $data['profile']);
+        if (!empty($profileData)) {
+            $this->profileRepository->createOrUpdateForUser($user->id, $profileData);
         }
 
-        return $user->fresh();
+        return $updatedUser->fresh();
     }
 
     /**
@@ -86,7 +116,7 @@ class UserManager implements UserManagerContract
      */
     public function delete(User $user): bool
     {
-        return $user->delete();
+        return $this->userRepository->delete($user->id);
     }
 
     /**
@@ -94,7 +124,7 @@ class UserManager implements UserManagerContract
      */
     public function find(int $id): ?User
     {
-        return User::find($id);
+        return $this->userRepository->find($id);
     }
 
     /**
@@ -102,7 +132,7 @@ class UserManager implements UserManagerContract
      */
     public function findByEmail(string $email): ?User
     {
-        return User::where('email', $email)->first();
+        return $this->userRepository->findByEmail($email);
     }
 
     /**
@@ -110,7 +140,7 @@ class UserManager implements UserManagerContract
      */
     public function getUsersByType(string $userType): Collection
     {
-        return User::ofType($userType)->get();
+        return $this->userRepository->findByUserType($userType);
     }
 
     /**
@@ -126,7 +156,7 @@ class UserManager implements UserManagerContract
      */
     public function activate(User $user): bool
     {
-        $result = $user->activate();
+        $result = $this->userRepository->updateStatus($user->id, 'active');
 
         if ($result) {
             // Handle activation via user type
@@ -146,7 +176,7 @@ class UserManager implements UserManagerContract
      */
     public function deactivate(User $user): bool
     {
-        $result = $user->deactivate();
+        $result = $this->userRepository->updateStatus($user->id, 'inactive');
 
         if ($result) {
             event(new UserDeactivated($user));
@@ -191,13 +221,14 @@ class UserManager implements UserManagerContract
 
         $hashedPassword = Hash::make($password);
         
-        $result = $user->update(['password' => $hashedPassword]);
+        $updatedUser = $this->userRepository->update($user->id, ['password' => $hashedPassword]);
         
-        if ($result) {
+        if ($updatedUser) {
             $this->addPasswordToHistory($user, $hashedPassword);
+            return true;
         }
         
-        return $result;
+        return false;
     }
 
     /**
@@ -218,25 +249,103 @@ class UserManager implements UserManagerContract
      */
     public function getStatistics(): array
     {
-        $total = User::count();
-        $active = User::active()->count();
-        $pending = User::pending()->count();
-        $verified = User::verified()->count();
+        return $this->userRepository->getUserStatistics();
+    }
 
-        $userTypes = [];
-        foreach ($this->getUserTypes() as $type => $config) {
-            $userTypes[$type] = User::ofType($type)->count();
-        }
+    /**
+     * Search users.
+     */
+    public function searchUsers(string $term, array $columns = ['name', 'email']): Collection
+    {
+        return $this->userRepository->searchUsers($term, $columns);
+    }
 
-        return [
-            'total' => $total,
-            'active' => $active,
-            'pending' => $pending,
-            'verified' => $verified,
-            'unverified' => $total - $verified,
-            'user_types' => $userTypes,
-            'last_updated' => now(),
-        ];
+    /**
+     * Get filtered users.
+     */
+    public function getFilteredUsers(array $filters, array $sorts = [], int $limit = null): Collection
+    {
+        return $this->userRepository->getFilteredUsers($filters, $sorts, $limit);
+    }
+
+    /**
+     * Get paginated users.
+     */
+    public function getPaginatedUsers(array $filters = [], int $perPage = 15)
+    {
+        return $this->userRepository->getPaginatedUsers($filters, $perPage);
+    }
+
+    /**
+     * Get recent users.
+     */
+    public function getRecentUsers(int $days = 30): Collection
+    {
+        return $this->userRepository->getRecentUsers($days);
+    }
+
+    /**
+     * Get active users.
+     */
+    public function getActiveUsers(): Collection
+    {
+        return $this->userRepository->findActiveUsers();
+    }
+
+    /**
+     * Get users with pending verification.
+     */
+    public function getUsersWithPendingVerification(): Collection
+    {
+        return $this->userRepository->findUsersWithPendingVerification();
+    }
+
+    /**
+     * Get users with expired passwords.
+     */
+    public function getUsersWithExpiredPasswords(int $days = 90): Collection
+    {
+        return $this->userRepository->findUsersWithExpiredPasswords($days);
+    }
+
+    /**
+     * Get inactive users.
+     */
+    public function getInactiveUsers(int $days = 30): Collection
+    {
+        return $this->userRepository->findInactiveUsers($days);
+    }
+
+    /**
+     * Bulk update user status.
+     */
+    public function bulkUpdateStatus(array $userIds, string $status): int
+    {
+        return $this->userRepository->bulkUpdateStatus($userIds, $status);
+    }
+
+    /**
+     * Archive inactive users.
+     */
+    public function archiveInactiveUsers(int $days = 180): int
+    {
+        return $this->userRepository->archiveInactiveUsers($days);
+    }
+
+    /**
+     * Get user analytics.
+     */
+    public function getUserAnalytics(array $metrics = [], string $period = '30days'): array
+    {
+        return $this->userRepository->getUsersForAnalytics($metrics, $period);
+    }
+
+    /**
+     * Export users.
+     */
+    public function exportUsers(array $filters = []): Collection
+    {
+        return $this->userRepository->getUsersForExport($filters);
     }
 
     /**

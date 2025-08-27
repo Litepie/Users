@@ -42,6 +42,23 @@ return new class extends Migration
             $table->string('emergency_contact_phone')->nullable();
             $table->string('emergency_contact_relationship')->nullable();
             
+            // Organization hierarchy fields
+            $table->foreignId('organization_id')->nullable()->constrained('organizations')->onDelete('set null');
+            $table->string('organization_role')->nullable(); // manager, supervisor, staff, intern
+            $table->string('employee_id')->nullable()->unique();
+            $table->string('department')->nullable(); // Can be overridden by organization department
+            $table->string('division')->nullable();
+            $table->string('team')->nullable();
+            $table->date('hire_date')->nullable();
+            $table->date('termination_date')->nullable();
+            $table->string('employment_status')->default('active'); // active, inactive, terminated, suspended
+            $table->string('employment_type')->nullable(); // full-time, part-time, contract, freelance
+            $table->decimal('salary', 10, 2)->nullable();
+            $table->string('salary_currency', 3)->default('USD');
+            $table->json('reporting_structure')->nullable(); // Store reporting hierarchy
+            $table->json('permissions')->nullable(); // Organization-specific permissions
+            $table->json('organization_metadata')->nullable(); // Org-specific data
+            
             // Social and preferences
             $table->json('social_links')->nullable();
             $table->json('preferences')->nullable();
@@ -54,6 +71,12 @@ return new class extends Migration
             $table->index(['tenant_id']);
             $table->index(['first_name', 'last_name']);
             $table->index(['company']);
+            $table->index(['organization_id']);
+            $table->index(['organization_id', 'organization_role']);
+            $table->index(['employee_id']);
+            $table->index(['employment_status']);
+            $table->index(['hire_date']);
+            $table->index(['department', 'division', 'team']);
         });
     }
 
