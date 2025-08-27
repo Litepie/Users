@@ -8,11 +8,56 @@ use Litepie\Organization\Models\Organization;
 class OrganizationUserType extends BaseUserType
 {
     /**
+     * The user type name.
+     */
+    protected string $name = 'organization';
+
+    /**
+     * The user type display name.
+     */
+    protected string $displayName = 'Organization Member';
+
+    /**
+     * Default roles for organization users.
+     */
+    protected array $defaultRoles = ['organization-member'];
+
+    /**
+     * Default permissions for organization users.
+     */
+    protected array $defaultPermissions = [
+        'organization.view',
+        'organization.members.view',
+        'profile.update',
+        'profile.view',
+    ];
+
+    /**
+     * Registration workflow name.
+     */
+    protected string $registrationWorkflow = 'organization_user_registration';
+
+    /**
+     * Whether this user type is allowed in tenants.
+     */
+    protected bool $allowedInTenants = true;
+
+    /**
+     * Features accessible by this user type.
+     */
+    protected array $accessibleFeatures = [
+        'organization_dashboard',
+        'team_management', 
+        'directory',
+        'announcements'
+    ];
+    /**
      * Get the registration workflow for this user type.
      */
     public function getRegistrationWorkflow(): string
     {
-        return \Litepie\Users\Workflows\OrganizationUserRegistrationWorkflow::class;
+        // TODO: Create workflow when flow package is integrated
+        return 'organization_user_registration';
     }
 
     /**
@@ -31,10 +76,24 @@ class OrganizationUserType extends BaseUserType
     /**
      * Get validation rules for organization user registration.
      */
-    public function getValidationRules(): array
+    public function getRegistrationRules(): array
     {
-        return array_merge(parent::getValidationRules(), [
+        return array_merge(parent::getRegistrationRules(), [
             'organization_id' => 'required|exists:organizations,id',
+            'organization_position' => 'nullable|string|max:255',
+            'reports_to_user_id' => 'nullable|exists:users,id',
+            'primary_manager_id' => 'nullable|exists:users,id',
+            'work_location' => 'nullable|in:remote,office,hybrid',
+            'office_location' => 'nullable|string|max:255',
+        ]);
+    }
+
+    /**
+     * Get validation rules for profile update.
+     */
+    public function getUpdateRules(): array
+    {
+        return array_merge(parent::getUpdateRules(), [
             'organization_position' => 'nullable|string|max:255',
             'reports_to_user_id' => 'nullable|exists:users,id',
             'primary_manager_id' => 'nullable|exists:users,id',
@@ -48,26 +107,26 @@ class OrganizationUserType extends BaseUserType
      */
     public function handleRegistration(array $data): array
     {
-        // Validate organization membership
-        $organization = Organization::find($data['organization_id']);
+        // TODO: Validate organization membership when organization package is available
+        // $organization = Organization::find($data['organization_id']);
         
-        if (!$organization) {
-            throw new \InvalidArgumentException('Invalid organization');
-        }
+        // if (!$organization) {
+        //     throw new \InvalidArgumentException('Invalid organization');
+        // }
 
         // Check organization limits
-        if ($organization->hasReachedUserLimit()) {
-            throw new \InvalidArgumentException('Organization has reached user limit');
-        }
+        // if ($organization->hasReachedUserLimit()) {
+        //     throw new \InvalidArgumentException('Organization has reached user limit');
+        // }
 
         // Set default organization data
         $data['organization_joined_at'] = now();
-        $data['status'] = $organization->requires_approval ? 'pending' : 'active';
+        $data['status'] = 'pending'; // Default to pending for organization approval
         $data['organization_permissions'] = $this->getDefaultPermissions();
         
         // Set default work settings
         $data['work_schedule'] = $data['work_schedule'] ?? [
-            'timezone' => $organization->timezone ?? config('app.timezone'),
+            'timezone' => config('app.timezone'),
             'working_days' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
             'working_hours' => [
                 'start' => '09:00',
@@ -81,7 +140,7 @@ class OrganizationUserType extends BaseUserType
     /**
      * Handle user activation for organization users.
      */
-    public function handleActivation(User $user): void
+    public function handleActivation($user): bool
     {
         parent::handleActivation($user);
         
@@ -89,18 +148,20 @@ class OrganizationUserType extends BaseUserType
         $this->setupOrganizationAccess($user);
         $this->notifyOrganizationAdmins($user);
         $this->createOrganizationProfile($user);
+        
+        return true;
     }
 
     /**
      * Handle user deactivation for organization users.
      */
-    public function handleDeactivation(User $user): void
+    public function handleDeactivation($user): bool
     {
-        parent::handleDeactivation($user);
-        
         $this->revokeOrganizationAccess($user);
         $this->notifyOrganizationOfDeparture($user);
         $this->updateReportingStructure($user);
+        
+        return true;
     }
 
     /**
@@ -225,15 +286,16 @@ class OrganizationUserType extends BaseUserType
             $user->profile()->create([]);
         }
 
-        $organization = $user->organization;
+        // TODO: Update when organization package is available
+        // $organization = $user->organization;
         
         $user->profile->update([
-            'organization_id' => $organization->id,
+            'organization_id' => $user->organization_id,
             'organization_role' => $user->organization_position,
             'hire_date' => $user->organization_joined_at,
             'employment_status' => 'active',
             'employment_type' => 'full-time', // Default, can be updated
-            'department' => $organization->departments()->first()?->name,
+            // 'department' => $organization->departments()->first()?->name,
         ]);
     }
 
@@ -242,15 +304,16 @@ class OrganizationUserType extends BaseUserType
      */
     protected function notifyOrganizationAdmins(User $user): void
     {
-        $organization = $user->organization;
-        $admins = $organization->users()
-            ->where('is_organization_admin', true)
-            ->where('id', '!=', $user->id)
-            ->get();
+        // TODO: Implement when notification classes are created
+        // $organization = $user->organization;
+        // $admins = $organization->users()
+        //     ->where('is_organization_admin', true)
+        //     ->where('id', '!=', $user->id)
+        //     ->get();
 
-        foreach ($admins as $admin) {
-            $admin->notify(new \Litepie\Users\Notifications\NewOrganizationMember($user));
-        }
+        // foreach ($admins as $admin) {
+        //     $admin->notify(new \Litepie\Users\Notifications\NewOrganizationMember($user));
+        // }
     }
 
     /**
@@ -287,20 +350,21 @@ class OrganizationUserType extends BaseUserType
      */
     protected function notifyOrganizationOfDeparture(User $user): void
     {
-        $organization = $user->organization;
+        // TODO: Implement when notification classes are created
+        // $organization = $user->organization;
         
-        if (!$organization) {
-            return;
-        }
+        // if (!$organization) {
+        //     return;
+        // }
 
-        $admins = $organization->users()
-            ->where('is_organization_admin', true)
-            ->where('id', '!=', $user->id)
-            ->get();
+        // $admins = $organization->users()
+        //     ->where('is_organization_admin', true)
+        //     ->where('id', '!=', $user->id)
+        //     ->get();
 
-        foreach ($admins as $admin) {
-            $admin->notify(new \Litepie\Users\Notifications\OrganizationMemberLeft($user));
-        }
+        // foreach ($admins as $admin) {
+        //     $admin->notify(new \Litepie\Users\Notifications\OrganizationMemberLeft($user));
+        // }
     }
 
     /**

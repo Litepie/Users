@@ -53,6 +53,14 @@ return [
             'default_roles' => ['system'],
             'allowed_in_tenants' => false,
         ],
+        'organization' => [
+            'name' => 'Organization Member',
+            'class' => \Litepie\Users\UserTypes\OrganizationUserType::class,
+            'model' => \Litepie\Users\Models\User::class,
+            'registration_workflow' => 'organization_user_registration',
+            'default_roles' => ['organization-member'],
+            'allowed_in_tenants' => true,
+        ],
     ],
 
     /*
